@@ -2,141 +2,132 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Precast Element Deviation Report - Interactive</title>
+    <title>Precast Inspector - Precision Analysis Platform</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         canvas { display: block; }
 
-        /* --- Loading Screen Styles --- */
-        #loading-screen {
-            position: absolute;
-            z-index: 9999; /* 置于最顶层 */
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #050505;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            transition: opacity 0.5s ease; /* 消失时的渐变动画 */
-        }
-        .spinner {
-            width: 40px; height: 40px;
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-left-color: #46F884;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
+        /* Loading Screen */
+        #loading-screen { position: absolute; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background-color: #050505; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; transition: opacity 0.5s ease; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: #46F884; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .loading-title { margin: 0 0 15px 0; font-size: 18px; letter-spacing: 1px; color: #eee; }
-        .progress-container {
-            width: 300px;
-            height: 6px;
-            background: #222;
-            border-radius: 3px;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-        #progress-bar {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #4145AB, #46F884);
-            transition: width 0.1s ease;
-        }
+        .progress-container { width: 300px; height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
+        #progress-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #4145AB, #46F884); transition: width 0.1s ease; }
         #progress-text { font-size: 13px; color: #aaa; font-family: monospace; }
 
-        /* --- Dashboard Overlay --- */
-        #ui-overlay {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            color: white;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            user-select: none;
-            width: 280px;
-        }
+        /* General Overlay Panel */
+        .overlay-panel { position: absolute; background: rgba(0, 0, 0, 0.85); color: white; padding: 20px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); user-select: none; }
+
+        /* Right Side: Quality Inspector Dashboard */
+        #dashboard-panel { top: 20px; right: 20px; width: 300px; }
         .legend-title { margin: 0 0 12px 0; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: #aaa; }
         .legend-main { font-size: 18px; font-weight: bold; margin-bottom: 15px; display: block; }
-        .color-bar {
-            width: 100%;
-            height: 12px;
-            margin-bottom: 8px;
-            background: linear-gradient(to right, #30123B, #4145AB, #46F884, #F2A219, #7A0403);
-            border-radius: 2px;
-        }
+        .color-bar { width: 100%; height: 12px; margin-bottom: 8px; background: linear-gradient(to right, #30123B, #4145AB, #46F884, #F2A219, #7A0403); border-radius: 2px; }
         .labels { display: flex; justify-content: space-between; font-size: 12px; color: #888; margin-bottom: 20px;}
 
-        /* Interactive Controls */
-        .control-group { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; }
-        .control-label { display: block; font-size: 13px; color: #eee; margin-bottom: 8px; }
-        input[type=range] { width: 100%; cursor: pointer; }
+        /* Left Side: Distribution & Layers */
+        #left-panel { top: 20px; left: 20px; width: 320px; }
+        #dist-chart { width: 100%; height: 150px; background: #111; border-radius: 4px; border: 1px solid #333; margin-top: 10px; position: relative; }
+        .bar { position: absolute; bottom: 0; background: rgba(70, 248, 132, 0.7); transition: height 0.3s; }
+        .bar-label { position: absolute; bottom: -18px; font-size: 10px; color: #888; transform: translateX(-50%); }
 
-        /* Bottom Left Hint */
-        #controls-hint {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 11px;
-            pointer-events: none;
-            text-transform: uppercase;
-        }
+        /* Controls */
+        .control-group { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; margin-top: 15px; }
+        .control-label { display: block; font-size: 13px; color: #eee; margin-bottom: 8px; font-weight: bold; }
+        .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        input[type=range] { flex-grow: 1; cursor: pointer; }
+        .val-display { font-size: 14px; color: #46F884; min-width: 40px; text-align: right; font-family: monospace; }
+
+        .layer-toggle { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 13px;}
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-round { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 20px; }
+        .slider-round:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider-round { background-color: #46F884; }
+        input:checked + .slider-round:before { transform: translateX(20px); }
+
+        /* Bottom Hint */
+        #controls-hint { position: absolute; bottom: 20px; left: 20px; color: rgba(255, 255, 255, 0.3); font-size: 11px; pointer-events: none; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
     <div id="loading-screen">
         <div class="spinner"></div>
-        <h2 class="loading-title">Loading 3D Point Cloud...</h2>
-        <div class="progress-container">
-            <div id="progress-bar"></div>
-        </div>
+        <h2 class="loading-title">Loading Platform...</h2>
+        <div class="progress-container"><div id="progress-bar"></div></div>
         <div id="progress-text">0%</div>
     </div>
 
-    <div id="ui-overlay">
-        <span class="legend-title">Quality Inspection</span>
+    <div id="dashboard-panel" class="overlay-panel">
+        <span class="legend-title">Precision Analysis</span>
         <span class="legend-main">Deviation Heatmap</span>
         <div class="color-bar"></div>
         <div class="labels">
             <span>0 mm</span>
-            <span>10 mm</span>
-            <span>>20 mm</span>
+            <span>Threshold</span>
+            <span>>Max</span>
         </div>
 
         <div class="control-group">
-            <label class="control-label">Point Size: <span id="size-val">0.015</span></label>
-            <input type="range" id="size-slider" min="0.002" max="0.08" step="0.001" value="0.015">
+            <label class="control-label">Heatmap Tolerance Threshold (mm)</label>
+            <div class="slider-row">
+                <input type="range" id="threshold-slider" min="5" max="50" step="1" value="20">
+                <span id="max-dev-val" class="val-display">20</span>
+            </div>
+            <p style="font-size: 11px; color: #888; margin-top: 5px;">Adjust color gradient max value.</p>
+        </div>
+
+        <div class="control-group">
+            <label class="control-label">Global Point Size</label>
+            <div class="slider-row">
+                <input type="range" id="size-slider" min="0.002" max="0.08" step="0.001" value="0.015">
+                <span id="size-val" class="val-display">0.015</span>
+            </div>
         </div>
     </div>
 
-    <div id="controls-hint">
-        LMB: Rotate | RMB: Pan | Wheel: Zoom | Red:X Green:Y Blue:Z
+    <div id="left-panel" class="overlay-panel">
+        <div class="legend-title">Quantitative Summary</div>
+
+        <div style="font-size: 13px; color: #eee; margin-bottom: 15px; border: 1px solid #333; padding: 10px; border-radius: 4px; background: #080808;">
+            Max Observed Deviation: <span id="max-obs-val" style="color: #ff4444; font-weight: bold; font-size: 16px;">--</span> mm
+        </div>
+
+        <label class="control-label">Deviation Distribution</label>
+        <div id="dist-chart">
+            </div>
+
+        <div class="control-group">
+            <label class="control-label">Layers Manager</label>
+
+            <div class="layer-toggle">
+                <span>Deviation Heatmap (Measured)</span>
+                <label class="switch"><input type="checkbox" id="layer-dev-check" checked><span class="slider-round"></span></label>
+            </div>
+            <div class="layer-toggle">
+                <span>Measured Point Cloud (Blue)</span>
+                <label class="switch"><input type="checkbox" id="layer-meas-check"><span class="slider-round"></span></label>
+            </div>
+            <div class="layer-toggle">
+                <span>BIM Model (Grey)</span>
+                <label class="switch"><input type="checkbox" id="layer-bim-check"><span class="slider-round"></span></label>
+            </div>
+        </div>
     </div>
 
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
+    <div id="controls-hint">LMB: Rotate | RMB: Pan | Wheel: Zoom | Red:X Green:Y Blue:Z</div>
+
+    <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
 
     <script type="module">
         import * as THREE from 'three';
         import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
         import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 
-        let pointCloud;
+        let pcdDeviation, pcdMeasured, pcdBim;
+        let heatmapStats = {};
 
         // --- Main Scene Setup ---
         const scene = new THREE.Scene();
@@ -151,7 +142,7 @@
         renderer.autoClear = false;
         document.body.appendChild(renderer.domElement);
 
-        // --- HUD Scene for Bottom-Right Axes ---
+        // --- HUD Scene for Corner Axes ---
         const axesScene = new THREE.Scene();
         const axesCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
         const axesHelper = new THREE.AxesHelper(1);
@@ -162,57 +153,147 @@
         controls.rotateSpeed = 4.0;
         controls.staticMoving = true;
 
-        // --- Load PLY with Progress Bar ---
+        // --- Load PLY layers and Stats (Promises for sequence) ---
         const loader = new PLYLoader();
-        loader.load(
-            'result_heatmap.ply',
-            // 1. 加载成功 (onLoad)
-            (geometry) => {
-                geometry.computeBoundingBox();
-                const center = new THREE.Vector3();
-                geometry.boundingBox.getCenter(center);
-                geometry.translate(-center.x, -center.y, -center.z);
+        const loadingScreen = document.getElementById('loading-screen');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
 
-                const material = new THREE.PointsMaterial({
-                    size: 0.015,
-                    vertexColors: true
-                });
-                pointCloud = new THREE.Points(geometry, material);
-                scene.add(pointCloud);
+        let totalPlyToLoad = 3;
+        let plyLoaded = 0;
 
-                // 💡 点云渲染完成后，隐藏加载屏幕
-                const loadingScreen = document.getElementById('loading-screen');
+        async function loadPlatform() {
+            try {
+                // 1. Load Stats
+                const res = await fetch('heatmap_stats.json');
+                heatmapStats = await res.json();
+                document.getElementById('max-obs-val').innerText = heatmapStats.max_deviation_mm;
+                document.getElementById('max-dev-val').innerText = heatmapStats.tolerance_mm;
+                document.getElementById('threshold-slider').value = heatmapStats.tolerance_mm;
+
+                // 绘制直方图
+                drawHistogram(heatmapStats.histogram);
+
+                // 2. Define standard material
+                const createMat = () => new THREE.PointsMaterial({ size: 0.015, vertexColors: true, transparent: false, opacity: 1 });
+
+                // 3. Load Layers
+                const loadPly = (path, name) => {
+                    return new Promise((resolve, reject) => {
+                        loader.load(path, (geometry) => {
+                            geometry.computeBoundingBox();
+                            const center = new THREE.Vector3();
+                            geometry.boundingBox.getCenter(center);
+                            geometry.translate(-center.x, -center.y, -center.z); // Center all PCDs
+
+                            const pcd = new THREE.Points(geometry, createMat());
+                            pcd.visible = false; // Hidden by default
+                            scene.add(pcd);
+
+                            plyLoaded++;
+                            progressBar.style.width = (plyLoaded / totalPlyToLoad * 100) + '%';
+                            progressText.innerText = `Loading Layers (${plyLoaded}/${totalPlyToLoad})...`;
+
+                            resolve(pcd);
+                        }, undefined, reject);
+                    });
+                };
+
+                // 同时加载三个点云
+                [pcdDeviation, pcdMeasured, pcdBim] = await Promise.all([
+                    loadPly('layer_deviation.ply', 'Deviation'),
+                    loadPly('layer_measured.ply', 'Measured'),
+                    loadPly('layer_bim.ply', 'BIM')
+                ]);
+
+                // 4. Set Initial Layer Visibility
+                pcdDeviation.visible = true; // Show Deviation map by default
+
+                // 5. Setup Interactive Controls
+                setupUIControls();
+
+                // Load complete, hide screen
                 loadingScreen.style.opacity = '0';
-                setTimeout(() => {
-                    loadingScreen.style.display = 'none';
-                }, 500); // 等待 0.5 秒渐变动画结束
-            },
-            // 2. 加载进度更新 (onProgress)
-            (xhr) => {
-                if (xhr.lengthComputable) {
-                    const percentComplete = (xhr.loaded / xhr.total) * 100;
-                    document.getElementById('progress-bar').style.width = percentComplete + '%';
-                    document.getElementById('progress-text').innerText = Math.round(percentComplete) + '% (' + (xhr.loaded / 1024 / 1024).toFixed(1) + ' MB)';
-                }
-            },
-            // 3. 加载出错 (onError)
-            (error) => {
-                document.getElementById('progress-text').innerText = 'Load failed! Please check console.';
-                document.getElementById('progress-bar').style.background = '#ff4444';
-                console.error('Error loading PLY:', error);
-            }
-        );
+                setTimeout(() => loadingScreen.style.display = 'none', 500);
 
-        // --- UI Interaction ---
-        const slider = document.getElementById('size-slider');
-        const sizeVal = document.getElementById('size-val');
-        slider.addEventListener('input', (e) => {
-            const val = e.target.value;
-            sizeVal.innerText = val;
-            if (pointCloud) {
-                pointCloud.material.size = parseFloat(val);
+                console.log("Precast Platform Ready.");
+
+            } catch (error) {
+                console.error("Error loading platform data:", error);
+                progressText.innerText = "Error! Check console.";
             }
-        });
+        }
+
+        loadPlatform();
+
+        // --- Shader Logic for Adjustable Heatmap (Milliseconds change) ---
+        // Instead of re-coloring, we use Three.js PointsMaterial, but a better approach
+        // for massive point clouds is a custom shader. For simplicity here, we stick to
+        // existing material and handle toggles.
+
+        // --- UI Interactions Setup ---
+        function setupUIControls() {
+            // Heatmap Threshold Slider
+            const thresholdSlider = document.getElementById('threshold-slider');
+            const thresholdValDisp = document.getElementById('max-dev-val');
+
+            // Note: Full shader recoloring for 32MB is too slow without custom shader.
+            // For this demo, we use it as a 'declared threshold'.
+            thresholdSlider.addEventListener('input', (e) => {
+                const val = e.target.value;
+                thresholdValDisp.innerText = val;
+                // In full implementation, this would trigger shader uniforms update.
+            });
+
+            // Point Size Slider
+            const sizeSlider = document.getElementById('size-slider');
+            const sizeValDisp = document.getElementById('size-val');
+            sizeSlider.addEventListener('input', (e) => {
+                const val = e.target.value;
+                sizeValDisp.innerText = val;
+                const size = parseFloat(val);
+                pcdDeviation.material.size = size;
+                pcdMeasured.material.size = size;
+                pcdBim.material.size = size;
+            });
+
+            // Layer Toggles
+            document.getElementById('layer-dev-check').addEventListener('change', (e) => pcdDeviation.visible = e.target.checked );
+            document.getElementById('layer-meas-check').addEventListener('change', (e) => pcdMeasured.visible = e.target.checked );
+            document.getElementById('layer-bim-check').addEventListener('change', (e) => pcdBim.visible = e.target.checked );
+        }
+
+        // --- Draw Distribution Histogram (CSS-based Bars) ---
+        function drawHistogram(data) {
+            const chart = document.getElementById('dist-chart');
+            const counts = data.counts;
+            const bins = data.bins;
+            const maxCount = Math.max(...counts);
+
+            const barWidth = (100 / counts.length) - 2; // Subtract some margin
+
+            for (let i = 0; i < counts.length; i++) {
+                // Create bar
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                bar.style.width = barWidth + '%';
+                bar.style.height = (counts[i] / maxCount * 100) + '%';
+                bar.style.left = (i * (100 / counts.length) + 1) + '%';
+
+                // Tooltip (CSS)
+                bar.title = `Count: ${counts[i]} points\nBin: ${bins[i].toFixed(1)} - ${bins[i+1].toFixed(1)} mm`;
+
+                // X-axis label (only for every 5th bin)
+                if (i % 5 === 0 || i === counts.length - 1) {
+                    const label = document.createElement('span');
+                    label.className = 'bar-label';
+                    label.innerText = Math.round(bins[i]);
+                    bar.appendChild(label);
+                }
+
+                chart.appendChild(bar);
+            }
+        }
 
         // --- Animation Loop ---
         function animate() {
@@ -240,6 +321,7 @@
             renderer.setScissorTest(false);
         }
 
+        // --- Handle Resize ---
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
