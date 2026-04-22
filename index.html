@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Precast Inspector - Free Rotation</title>
+    <title>Precast Inspector - Dynamic Heatmap</title>
     <style>
         body { margin: 0; overflow: hidden; background: #050505; color: white; font-family: 'Segoe UI', Tahoma, sans-serif; }
         .panel { position: absolute; background: rgba(15, 15, 15, 0.9); padding: 20px; border-radius: 12px; border: 1px solid #444; backdrop-filter: blur(10px); user-select: none; }
@@ -13,19 +13,16 @@
         .stat-card { background: #000; padding: 10px; border-radius: 6px; border-left: 4px solid #ff4444; margin-bottom: 15px; }
         .max-val { font-size: 24px; font-weight: bold; color: #ff4444; }
 
-        /* Histogram */
         #histogram { width: 100%; height: 100px; margin-top: 10px; display: flex; align-items: flex-end; gap: 1px; }
         .bar { background: #46F884; opacity: 0.6; flex: 1; transition: height 0.3s; }
 
         .val-disp { font-family: monospace; font-size: 14px; }
 
-        /* Color Bar */
         .color-bar {
             width: 100%; height: 8px; border-radius: 4px; margin-top: 15px;
             background: linear-gradient(to right, blue, cyan, lime, yellow, red);
         }
 
-        /* Dual Range Slider */
         .dual-slider-container { position: relative; width: 100%; height: 30px; margin-top: 10px; }
         .slider-track-bg { position: absolute; width: 100%; height: 4px; top: 13px; background: #333; border-radius: 2px; }
         .slider-track-active { position: absolute; height: 4px; top: 13px; background: #46F884; border-radius: 2px; z-index: 1; }
@@ -78,11 +75,11 @@
 
         <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 5px;">
             <div>
-                <div style="font-size: 13px; color: #aaa;">Min (Grey Below)</div>
+                <div style="font-size: 13px; color: #aaa;">Min <span style="font-size: 10px;">(Blue)</span></div>
                 <div class="val-disp" style="color: white;" id="min-txt">0.0 mm</div>
             </div>
             <div style="text-align: right;">
-                <div style="font-size: 13px; color: #aaa;">Max (Red Above)</div>
+                <div style="font-size: 13px; color: #aaa;">Max <span style="font-size: 10px;">(Red)</span></div>
                 <div class="val-disp" style="color: #ff4444;" id="max-txt">20.0 mm</div>
             </div>
         </div>
@@ -96,11 +93,11 @@
 
         <div class="color-bar"></div>
         <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666; margin-top: 5px;">
-            <span>0mm</span><span>Threshold</span><span id="max-legend-mm">>Max</span>
+            <span id="legend-min">0mm</span><span>Dynamic Heatmap Range</span><span id="legend-max">20mm</span>
         </div>
 
         <p style="font-size: 11px; color: #666; line-height: 1.4; margin-top: 15px;">
-            ※ Drag handles to define the heatmap range. Points outside will turn neutral grey.
+            ※ Drag handles to define the dynamic heatmap range. Points outside will turn neutral grey.
         </p>
 
         <div class="section-title" style="margin-top:25px;">Display Settings</div>
@@ -118,11 +115,9 @@
 
     <script type="module">
         import * as THREE from 'three';
-        // 💡 换回 TrackballControls 以获得 360度绝对自由翻转
         import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
         import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 
-        // --- 1. Main Scene Setup ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(3, 3, 5);
@@ -133,18 +128,14 @@
         renderer.autoClear = false;
         document.body.appendChild(renderer.domElement);
 
-        // 初始化 TrackballControls
         const controls = new TrackballControls(camera, renderer.domElement);
         controls.rotateSpeed = 4.0;
-        // 默认带有平滑惯性阻尼
 
-        // --- 1.5 坐标轴 HUD Setup ---
         const axesScene = new THREE.Scene();
         const axesCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
         const axesHelper = new THREE.AxesHelper(1.5);
         axesScene.add(axesHelper);
 
-        // --- 2. Shader (GPU) ---
         const vertexShader = `
             attribute vec3 color;
             varying float vDist;
@@ -172,7 +163,12 @@
                 if (d < uMin || d > uMax) {
                     gl_FragColor = vec4(0.25, 0.25, 0.25, 1.0); // 灰色
                 } else {
-                    float t = clamp(d / 20.0, 0.0, 1.0);
+                    // 💡 这里是修改的核心：计算该点在 (uMin, uMax) 区间内的相对位置，实现动态映射
+                    float range = uMax - uMin;
+                    float t = 0.0;
+                    if (range > 0.001) { // 防止除以0
+                        t = clamp((d - uMin) / range, 0.0, 1.0);
+                    }
                     gl_FragColor = vec4(getStandardHeatmap(t), 1.0);
                 }
             }
@@ -193,7 +189,6 @@
             bim: { url: 'layer_bim.ply', mat: null, mesh: null }
         };
 
-        // --- 3. UI Slider Logic ---
         const minSlider = document.getElementById('sld-min');
         const maxSlider = document.getElementById('sld-max');
         const sliderTrack = document.getElementById('slider-track');
@@ -213,6 +208,8 @@
 
             minTxt.innerText = minV.toFixed(1) + ' mm';
             maxTxt.innerText = maxV.toFixed(1) + ' mm';
+            document.getElementById('legend-min').innerText = minV.toFixed(0) + 'mm';
+            document.getElementById('legend-max').innerText = maxV.toFixed(0) + 'mm';
 
             heatMat.uniforms.uMin.value = minV;
             heatMat.uniforms.uMax.value = maxV;
@@ -228,7 +225,6 @@
             updateSliderUI();
         });
 
-        // --- 4. Loading & Center Logic ---
         let isCentered = false;
 
         async function init() {
@@ -241,7 +237,6 @@
                     if(maxDev !== undefined) {
                         const maxObsDev = parseFloat(maxDev);
                         document.getElementById('max-mm').innerText = maxDev;
-                        document.getElementById('max-legend-mm').innerText = `>${maxObsDev.toFixed(0)}mm`;
 
                         minSlider.max = maxObsDev;
                         maxSlider.max = maxObsDev;
@@ -277,7 +272,6 @@
                     document.getElementById('loading').style.display = 'block';
                     new PLYLoader().load(l.url, (geo) => {
 
-                        // 💡 保持 BIM 真实坐标，但让控制器的准星移到模型中心！
                         if (!isCentered) {
                             geo.computeBoundingBox();
                             const center = new THREE.Vector3();
@@ -285,7 +279,7 @@
 
                             controls.target.copy(center);
                             camera.position.set(center.x + 3, center.y + 3, center.z + 5);
-                            camera.lookAt(center); // 让相机看向中心
+                            camera.lookAt(center);
                             controls.update();
 
                             isCentered = true;
@@ -315,25 +309,21 @@
 
         init();
 
-        // --- 5. Custom Render Loop ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
 
-            // Step 1: 渲染主场景
             renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
             renderer.setScissorTest(false);
             renderer.clear();
             renderer.render(scene, camera);
 
-            // Step 2: 渲染画中画的坐标轴 HUD (右下角)
             const axesSize = 120;
             renderer.setViewport(window.innerWidth - axesSize, 0, axesSize, axesSize);
             renderer.setScissor(window.innerWidth - axesSize, 0, axesSize, axesSize);
             renderer.setScissorTest(true);
             renderer.clearDepth();
 
-            // 💡 关键修复：让画中画相机的 UP 向量和主相机完全一致，这样翻转时坐标轴才不会错乱
             axesCamera.position.copy(camera.position).sub(controls.target).setLength(3);
             axesCamera.up.copy(camera.up);
             axesCamera.lookAt(0, 0, 0);
@@ -345,7 +335,7 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-            controls.handleResize(); // TrackballControls 特有
+            controls.handleResize();
         });
 
         animate();
